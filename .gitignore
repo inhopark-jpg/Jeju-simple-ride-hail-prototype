@@ -1,0 +1,9 @@
+# Archived experiment — not part of the deployable site
+temp_repo/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Node
+node_modules/
