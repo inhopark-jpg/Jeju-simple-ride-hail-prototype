@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>제주 간편 모드</title>
+    <!-- Modern Typography: Pretendard -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="mobile-frame">
+        <div class="content">
+            <h1 class="title">호출을 더 쉽게,<br>간편 모드</h1>
+            <p class="body-text">간편 모드로 전환하여 더 쉽고 빠르게<br>차량을 호출해 보세요.</p>
+            
+            <div class="button-group">
+                <button type="button" class="btn btn-primary" onclick="animateButtonAndProceed(this)">시작하기</button>
+                <button type="button" class="btn btn-secondary" onclick="animateButtonAndProceed(this)">돌아가기</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function animateButtonAndProceed(button) {
+            // Provide visual feedback beyond CSS active state
+            button.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                button.style.transform = 'scale(1)';
+                if (button.classList.contains('btn-primary')) {
+                    sessionStorage.removeItem('savedStops');
+                    location.href = 'step1.html';
+                }
+            }, 150);
+        }
+    </script>
+</body>
+</html>

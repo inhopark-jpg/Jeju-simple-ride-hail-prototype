@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>제주 간편 모드 - 탑승 인원</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        #title-icon {
+            opacity: 0;
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        #main-title {
+            opacity: 0;
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+        }
+
+        .passenger-row {
+            background: #f4f5f7;
+            border-radius: 20px;
+            padding: 28px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .passenger-label {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--color-brand-text);
+        }
+
+        .passenger-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .count-display {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--color-brand-text);
+            min-width: 48px;
+            text-align: center;
+        }
+
+        .count-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 400;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.15s;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .count-btn:active {
+            transform: scale(0.9);
+        }
+
+        .minus-btn {
+            background: rgba(0, 0, 0, 0.08);
+            color: #555;
+        }
+
+        .minus-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+        .plus-btn {
+            background: rgba(11, 55, 84, 0.12);
+            color: var(--color-brand-navy);
+        }
+
+        .confirm-btn-wrap {
+            display: none;
+            padding: 0 0 12px;
+        }
+        .confirm-btn-wrap.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <main class="mobile-frame" style="background-color: #f4f5f7;">
+        <!-- Header -->
+        <header class="home-header">
+            <button class="hamburger-btn">
+                <i class="ph-bold ph-list" style="font-size: 28px; color: var(--color-text-main);"></i>
+            </button>
+            <div class="home-actions">
+                <button class="pill-btn" onclick="resetAndGoHome()">일반 모드 전환</button>
+                <button class="pill-btn"><i class="ph-fill ph-phone-call"></i> 고객 센터</button>
+            </div>
+        </header>
+
+        <div class="content dashboard-content" style="padding: 0; padding-top: 24px; display: flex; flex-direction: column;">
+            <div class="text-center" style="margin-bottom: 32px;">
+                <i id="title-icon" class="ph-fill ph-users" style="color: var(--color-brand-navy); font-size: 56px;"></i>
+                <h2 class="title" id="main-title" style="margin-top: 16px; margin-bottom: 0;">몇 명 탑승하나요?</h2>
+            </div>
+
+            <div style="background: white; border-top-left-radius: 24px; border-top-right-radius: 24px; flex: 1; padding: 24px 20px 20px; display: flex; flex-direction: column; gap: 16px;">
+                <div class="passenger-row">
+                    <span class="passenger-label">성인</span>
+                    <div class="passenger-controls">
+                        <button class="count-btn minus-btn" id="adult-minus">−</button>
+                        <span class="count-display" id="adult-count">1명</span>
+                        <button class="count-btn plus-btn" id="adult-plus">+</button>
+                    </div>
+                </div>
+
+                <div class="passenger-row">
+                    <span class="passenger-label">청소년</span>
+                    <div class="passenger-controls">
+                        <button class="count-btn minus-btn" id="teen-minus">−</button>
+                        <span class="count-display" id="teen-count">0명</span>
+                        <button class="count-btn plus-btn" id="teen-plus">+</button>
+                    </div>
+                </div>
+
+                <div class="passenger-row">
+                    <span class="passenger-label">어린이</span>
+                    <div class="passenger-controls">
+                        <button class="count-btn minus-btn" id="child-minus">−</button>
+                        <span class="count-display" id="child-count">0명</span>
+                        <button class="count-btn plus-btn" id="child-plus">+</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Bar -->
+        <div style="padding: 0 20px 16px; background: white; flex-shrink: 0;">
+            <div class="confirm-btn-wrap" id="confirm-btn-wrap">
+                <button class="btn btn-primary" id="confirm-btn">승객 수 변경</button>
+            </div>
+            <button class="btn btn-secondary" onclick="history.back()">돌아가기</button>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const MAX = 9;
+
+            let passengers = { adult: 1, teen: 0, child: 0 };
+
+            // Load from sessionStorage
+            try {
+                const saved = JSON.parse(sessionStorage.getItem('passengers') || 'null');
+                if (saved) passengers = saved;
+            } catch(e) {}
+
+            const initial = { ...passengers };
+
+            const counts = {
+                adult: document.getElementById('adult-count'),
+                teen:  document.getElementById('teen-count'),
+                child: document.getElementById('child-count'),
+            };
+            const minusBtns = {
+                adult: document.getElementById('adult-minus'),
+                teen:  document.getElementById('teen-minus'),
+                child: document.getElementById('child-minus'),
+            };
+            const confirmWrap = document.getElementById('confirm-btn-wrap');
+            const confirmBtn  = document.getElementById('confirm-btn');
+
+            function render() {
+                Object.keys(passengers).forEach(key => {
+                    counts[key].textContent = passengers[key] + '명';
+                    minusBtns[key].disabled = passengers[key] === 0;
+                });
+
+                // Minimum 1 total passenger — adult minus disabled if total would drop to 0
+                const total = passengers.adult + passengers.teen + passengers.child;
+                if (total <= 1 && passengers.adult === 1) {
+                    minusBtns.adult.disabled = true;
+                }
+
+                const changed = Object.keys(passengers).some(k => passengers[k] !== initial[k]);
+                confirmWrap.classList.toggle('visible', changed);
+            }
+
+            function makeHandlers(key) {
+                document.getElementById(key + '-plus').addEventListener('click', () => {
+                    const total = passengers.adult + passengers.teen + passengers.child;
+                    if (total < MAX) passengers[key]++;
+                    render();
+                });
+                minusBtns[key].addEventListener('click', () => {
+                    if (passengers[key] > 0) passengers[key]--;
+                    render();
+                });
+            }
+
+            ['adult', 'teen', 'child'].forEach(makeHandlers);
+
+            confirmBtn.addEventListener('click', () => {
+                sessionStorage.setItem('passengers', JSON.stringify(passengers));
+                // Update the label in home.html via sessionStorage, then go back
+                history.back();
+            });
+
+            render();
+        });
+
+        function resetAndGoHome() {
+            sessionStorage.clear();
+            location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

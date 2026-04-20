@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>제주 간편 모드 - 지도 선택</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Modern Typography: Pretendard -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="styles.css">
+    <!-- Phosphor Icons for map bounds -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <main class="mobile-frame">
+        <!-- Top App Bar -->
+        <header class="top-app-bar">
+            <button class="nav-back-btn" onclick="history.back()" aria-label="뒤로가기">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            즐겨찾기
+        </header>
+
+        <!-- Map Area -->
+        <div class="map-container">
+            <div id="map"></div>
+
+            <!-- Red Center Pin Overlay -->
+            <div id="center-pin">
+                <svg id="center-pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#DC2626" stroke="white" stroke-width="1.5" style="width: 48px; height: 48px;">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                    <circle cx="12" cy="9" r="3" fill="white" />
+                </svg>
+                <div id="center-pin-tooltip">
+                    서비스 지역이 아닙니다
+                </div>
+            </div>
+
+            <!-- Floating Controls -->
+            <div class="map-controls">
+                <button id="my-location-btn" class="map-ctrl-btn" style="color: #2563EB;">
+                    <i class="ph-fill ph-navigation-arrow"></i>
+                </button>
+                <button id="zoom-in-btn" class="map-ctrl-btn zoom-btn" style="font-weight: 800; font-size: 24px;">+</button>
+                <button id="zoom-out-btn" class="map-ctrl-btn zoom-btn" style="font-weight: 800; font-size: 24px;">-</button>
+            </div>
+
+            <!-- Guide Snackbar -->
+            <div id="guide-snackbar" class="guide-snackbar">
+                지도를 움직여 정류장을 선택해주세요.
+            </div>
+
+            <!-- Bottom Custom Name Modal (Hidden initially) -->
+            <div id="custom-name-modal" class="custom-name-modal">
+                <div class="modal-header">
+                    <div class="modal-title-main" id="modal-stop-name">내수북이263번 | 신대1구노인정</div>
+                    <div class="modal-subtitle" id="modal-stop-sub">내수북이263번 | 신대1구노인정</div>
+                    <button class="modal-close" id="modal-close-btn">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-input-wrapper">
+                        <input type="text" id="custom-name-input" placeholder="정류장 이름을 입력해주세요">
+                        <button class="modal-input-clear" id="modal-clear-btn" style="display:none;">✕</button>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="modal-btn" id="modal-confirm-btn">확인</button>
+                </div>
+            </div>
+
+            <!-- Toast Messages -->
+            <div id="toast" class="toast-message">가장 가까운 정류장으로 설정됨</div>
+        </div>
+
+        <!-- System Dialog -->
+        <div class="system-dialog-overlay" id="system-dialog-overlay">
+            <div class="system-dialog">
+                <div class="system-dialog-message" id="system-dialog-message"></div>
+                <input type="text" class="system-dialog-input" id="system-dialog-input">
+                <div class="system-dialog-actions">
+                    <button class="system-dialog-btn btn-cancel" id="system-dialog-cancel">취소</button>
+                    <button class="system-dialog-btn btn-confirm" id="system-dialog-confirm">확인</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lightbox for completion -->
+        <div id="complete-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 9999; flex-direction: column; align-items: center; justify-content: center;">
+            <div style="width: 100px; height: 100px; border-radius: 50%; background-color: white; display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+                <i class="ph-bold ph-check" style="color: var(--color-brand-navy); font-size: 60px;"></i>
+            </div>
+            <div id="complete-overlay-text" style="color: white; font-size: 28px; font-weight: 800; text-align: center; line-height: 1.4; letter-spacing: -0.5px;">간편 모드 설정이<br>완료됐습니다</div>
+        </div>
+    </main>
+
+    <!-- Map Data -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Include Local GeoJSON as variables -->
+    <script src="osong_service_area/osong_bus_stops.js"></script>
+    <script src="osong_service_area/osong_boundary.js"></script>
+
+    <script>
+        // DOM Elements
+        const toast = document.getElementById('toast');
+        const centerPinIcon = document.getElementById('center-pin-icon');
+        const centerPinTooltip = document.getElementById('center-pin-tooltip');
+        const guideSnackbar = document.getElementById('guide-snackbar');
+        const body = document.body;
+        
+        // Modal Elements
+        const modal = document.getElementById('custom-name-modal');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const modalStopName = document.getElementById('modal-stop-name');
+        const modalStopSub = document.getElementById('modal-stop-sub');
+        const customNameInput = document.getElementById('custom-name-input');
+        const modalClearBtn = document.getElementById('modal-clear-btn');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+
+        let isSnapping = false;
+        let currentSelectedStop = null;
+        let serviceAreaPolygon = null;
+
+        // Utilities
+        function showToast(msg) {
+            toast.innerText = msg || "가장 가까운 정류장으로 설정됨";
+            toast.style.opacity = '1';
+            setTimeout(() => toast.style.opacity = '0', 2000);
+        }
+
+        // Modal Handlers
+        function showModal(stopName) {
+            modalStopName.innerText = stopName;
+            modalStopSub.innerText = stopName;
+            modal.classList.add('is-active');
+            guideSnackbar.classList.add('hidden');
+            customNameInput.value = "";
+            modalClearBtn.style.display = "none";
+        }
+        
+        function hideModal() {
+            modal.classList.remove('is-active');
+            guideSnackbar.classList.remove('hidden');
+        }
+
+        modalCloseBtn.addEventListener('click', hideModal);
+
+        customNameInput.addEventListener('input', (e) => {
+            modalClearBtn.style.display = e.target.value.length > 0 ? 'block' : 'none';
+        });
+
+        modalClearBtn.addEventListener('click', () => {
+            customNameInput.value = '';
+            modalClearBtn.style.display = 'none';
+            customNameInput.focus();
+        });
+
+        modalConfirmBtn.addEventListener('click', () => {
+            const val = customNameInput.value.trim() || currentSelectedStop.name;
+            let stops = JSON.parse(sessionStorage.getItem('savedStops') || '[]');
+
+            const isDuplicate = stops.some(s => s.original === currentSelectedStop.name);
+            if (isDuplicate) {
+                showDialog({
+                    type: 'alert',
+                    message: '이미 추가된 정류장입니다.<br>다른 정류장을 선택해 주세요.',
+                    confirmText: '확인',
+                    onConfirm: () => {}
+                });
+                return;
+            }
+
+            const usedColorIndices = stops.map(s => s.colorIndex).filter(i => i !== undefined);
+            const nextColorIndex = [0, 1, 2, 3].find(i => !usedColorIndices.includes(i)) ?? stops.length % 4;
+            stops.push({ name: val, original: currentSelectedStop.name, colorIndex: nextColorIndex });
+            sessionStorage.setItem('savedStops', JSON.stringify(stops));
+            hideModal();
+            
+            if (stops.length >= 2) {
+                // Show completion lightbox directly over map
+                const overlay = document.getElementById('complete-overlay');
+                const overlayText = document.getElementById('complete-overlay-text');
+                
+                if (stops.length > 2) {
+                    overlayText.innerHTML = '정류장이<br>추가되었습니다';
+                } else {
+                    overlayText.innerHTML = '간편 모드 설정이<br>완료됐습니다';
+                }
+                
+                overlay.style.display = 'flex';
+                setTimeout(() => {
+                    location.href = 'home.html';
+                }, 2000);
+            } else {
+                const overlay = document.getElementById('complete-overlay');
+                const overlayText = document.getElementById('complete-overlay-text');
+                overlayText.innerHTML = '정류장을<br>추가했습니다';
+                overlay.style.display = 'flex';
+                setTimeout(() => {
+                    location.href = 'step2.html';
+                }, 2000);
+            }
+        });
+
+        // Config
+        // Dialog engine
+        (function() {
+            const overlay = document.getElementById('system-dialog-overlay');
+            const msgEl   = document.getElementById('system-dialog-message');
+            const inputEl = document.getElementById('system-dialog-input');
+            const cancelBtn  = document.getElementById('system-dialog-cancel');
+            const confirmBtn = document.getElementById('system-dialog-confirm');
+            let callback = null;
+
+            window.showDialog = function({ message, type = 'alert', cancelText = '취소', confirmText = '확인', defaultValue = '', onConfirm }) {
+                msgEl.innerHTML = message;
+                cancelBtn.innerText = cancelText;
+                confirmBtn.innerText = confirmText;
+                inputEl.style.display = type === 'prompt' ? 'block' : 'none';
+                inputEl.value = defaultValue;
+                cancelBtn.style.display = type === 'alert' ? 'none' : 'block';
+                callback = onConfirm;
+                overlay.classList.add('active');
+                if (type === 'prompt') setTimeout(() => inputEl.focus(), 50);
+            };
+
+            cancelBtn.addEventListener('click', () => overlay.classList.remove('active'));
+            confirmBtn.addEventListener('click', () => {
+                overlay.classList.remove('active');
+                if (callback) callback(inputEl.style.display === 'block' ? inputEl.value : null);
+            });
+        })();
+
+        const OSONG_CENTER = [36.61922, 127.32832]; // Centered at 오송역(도착)
+        const map = L.map('map', {
+            zoomControl: false,
+            center: OSONG_CENTER,
+            zoom: 15,
+            scrollWheelZoom: 'center',
+            touchZoom: 'center',
+            doubleClickZoom: 'center'
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            minZoom: 0,
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            detectRetina: true
+        }).addTo(map);
+
+        document.getElementById('my-location-btn').addEventListener('click', () => {
+            map.flyTo(OSONG_CENTER, 16, { animate: true, duration: 0.6 });
+        });
+        document.getElementById('zoom-in-btn').addEventListener('click', () => {
+            map.zoomIn();
+        });
+        document.getElementById('zoom-out-btn').addEventListener('click', () => {
+            map.zoomOut();
+        });
+
+        // Data Loading
+        let busStops = [];
+        let leafletMarkers = [];
+        const busLayer = L.layerGroup().addTo(map);
+        let maskLayer = null;
+        let boundaryLayer = null;
+
+        const busStopIcon = L.divIcon({
+            html: '<img src="bus_stop_marker.svg" class="bus-stop-img">',
+            className: 'bus-stop-wrapper',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+
+        function loadMapData() {
+            const stopsData = OSONG_BUS_STOPS;
+            const boundaryData = OSONG_BOUNDARY;
+
+            busStops = stopsData.features.map(f => ({
+                lat: f.geometry.coordinates[1],
+                lng: f.geometry.coordinates[0],
+                name: f.properties.정류장명
+            }));
+
+            busStops.forEach((stop) => {
+                const marker = L.marker([stop.lat, stop.lng], { icon: busStopIcon }).addTo(busLayer);
+                leafletMarkers.push(marker);
+
+                marker.on('click', () => {
+                    isSnapping = true;
+                    currentSelectedStop = stop;
+                    map.flyTo([stop.lat, stop.lng], map.getZoom(), { animate: true, duration: 0.6 });
+                    showModal(stop.name);
+                });
+            });
+
+            const boundaryCoords = boundaryData.features[0].geometry.coordinates;
+            const worldPolygon = [[90, -180], [90, 180], [-90, 180], [-90, -180]];
+            const serviceAreaRing = boundaryCoords[0][0].map(coord => [coord[1], coord[0]]);
+            serviceAreaPolygon = serviceAreaRing;
+
+            maskLayer = L.polygon([worldPolygon, serviceAreaRing], {
+                color: 'transparent',
+                fillColor: '#808080',
+                fillOpacity: 0.5,
+                interactive: false
+            });
+
+            boundaryLayer = L.polygon(serviceAreaRing, {
+                color: '#2563EB',
+                weight: 2,
+                fillColor: '#3B82F6',
+                fillOpacity: 0.2
+            });
+
+            boundaryLayer.bindTooltip("청주 오송", { permanent: true, direction: "center", className: "service-area-label", interactive: true });
+            const zoomToSA = () => { if (map.getZoom() < 14) map.flyTo(boundaryLayer.getBounds().getCenter(), 14, { duration: 0.45, animate: true }); };
+            boundaryLayer.on('click', zoomToSA);
+            if (boundaryLayer.getTooltip()) boundaryLayer.getTooltip().on('click', zoomToSA);
+
+            updateMapVisuals();
+        }
+
+        loadMapData();
+
+        function updateMapVisuals() {
+            const currentZoom = map.getZoom();
+            const centerPin = document.getElementById('center-pin');
+
+            if (currentZoom < 14) {
+                if (boundaryLayer && !map.hasLayer(boundaryLayer)) { map.addLayer(boundaryLayer); boundaryLayer.bringToFront(); }
+                if (maskLayer && map.hasLayer(maskLayer)) map.removeLayer(maskLayer);
+                if (centerPin) { centerPin.style.opacity = '0'; centerPin.style.pointerEvents = 'none'; }
+                leafletMarkers.forEach(m => m.setOpacity(0));
+                setTimeout(() => { if (map.hasLayer(busLayer)) map.removeLayer(busLayer); }, 300);
+            } else {
+                if (boundaryLayer && map.hasLayer(boundaryLayer)) map.removeLayer(boundaryLayer);
+                if (maskLayer && !map.hasLayer(maskLayer)) { map.addLayer(maskLayer); maskLayer.bringToBack(); }
+                if (centerPin) { centerPin.style.opacity = '1'; centerPin.style.pointerEvents = 'none'; }
+                if (!map.hasLayer(busLayer)) map.addLayer(busLayer);
+                leafletMarkers.forEach(m => m.setOpacity(1));
+            }
+        }
+
+        map.on('zoomend', updateMapVisuals);
+
+        function findNearestStop(latlng) {
+            let nearest = null, minDist = Infinity;
+            busStops.forEach(stop => {
+                const dist = latlng.distanceTo(L.latLng(stop.lat, stop.lng));
+                if (dist < minDist) { minDist = dist; nearest = stop; }
+            });
+            return nearest;
+        }
+
+        function isPointInPolygon(point, polygon) {
+            if (!polygon) return true;
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+                if (((yi > point.lng) !== (yj > point.lng)) && (point.lat < (xj - xi) * (point.lng - yi) / (yj - yi) + xi)) inside = !inside;
+            }
+            return inside;
+        }
+
+        map.on('movestart', () => {
+            if (!isSnapping) {
+                body.classList.add('is-moving');
+                hideModal(); // hide modal if user starts panning explicitly
+                currentSelectedStop = null;
+            }
+        });
+
+        map.on('moveend', () => {
+            body.classList.remove('is-moving');
+            if (isSnapping) { isSnapping = false; return; }
+            if (map.getZoom() < 14) return;
+
+            const center = map.getCenter();
+            const isInside = isPointInPolygon(center, serviceAreaPolygon);
+            
+            if (isInside) {
+                centerPinIcon.style.opacity = '1';
+                centerPinTooltip.style.opacity = '0';
+            } else {
+                centerPinIcon.style.opacity = '0';
+                centerPinTooltip.style.opacity = '1';
+                hideModal();
+                guideSnackbar.classList.add('hidden'); // Also hide guide when outside service area
+                return;
+            }
+
+            const nearest = findNearestStop(center);
+            currentSelectedStop = null;
+
+            if (nearest) {
+                const dist = center.distanceTo([nearest.lat, nearest.lng]);
+                if (dist < 400) {
+                    isSnapping = true;
+                    currentSelectedStop = nearest;
+                    map.panTo([nearest.lat, nearest.lng], { animate: true, duration: 0.3 });
+                    showModal(nearest.name);
+                } else {
+                    hideModal();
+                }
+            } else {
+                hideModal();
+            }
+        });
+        
+        // Initial setup timeout
+        setTimeout(() => map.fire('moveend'), 500);
+    </script>
+</body>
+</html>

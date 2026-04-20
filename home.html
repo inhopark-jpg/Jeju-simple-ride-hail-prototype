@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>제주 간편 모드 - 메인</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        #title-icon {
+            opacity: 0;
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        #main-title {
+            opacity: 0;
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+        }
+    </style>
+</head>
+<body>
+    <main class="mobile-frame" style="background-color: #f4f5f7;">
+        <!-- Header -->
+        <header class="home-header">
+            <button class="hamburger-btn">
+                <i class="ph-bold ph-list" style="font-size: 28px; color: var(--color-text-main);"></i>
+            </button>
+            <div class="home-actions">
+                <button class="pill-btn" onclick="resetAndGoHome()">일반 모드 전환</button>
+                <button class="pill-btn"><i class="ph-fill ph-phone-call"></i> 고객 센터</button>
+            </div>
+        </header>
+
+        <div class="content dashboard-content" style="padding: 0; padding-top: 24px; display: flex; flex-direction: column;">
+            <div class="text-center" style="margin-bottom: 32px;">
+                <i id="title-icon" class="ph-fill ph-map-pin" style="color: var(--color-brand-navy); font-size: 56px;"></i>
+                <h2 class="title" id="main-title" style="margin-top: 16px; margin-bottom: 0;">어디서 출발할까요?</h2>
+            </div>
+
+            <div style="flex: 1; display: flex; flex-direction: column;">
+                <div class="stop-list-header" id="stop-list-header">
+                    <span id="edit-btn" style="display: flex; align-items: center; gap: 4px; cursor: pointer; color: #666;">
+                        정류장 편집 <i class="ph-bold ph-pencil-simple"></i>
+                    </span>
+                    <span id="passenger-label" style="display: flex; align-items: center; gap: 4px; cursor: pointer; color: #666; margin-left: auto;" onclick="location.href='passengers.html'">
+                        성인 1명 <i class="ph-bold ph-caret-down"></i>
+                    </span>
+                </div>
+
+                <div class="saved-stops-list" id="saved-stops-list" style="overflow-y: auto; flex: 1;">
+                    <!-- Javascript injects buttons here based on session context -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Bar for ride request flow -->
+        <div id="bottom-bar" style="display: none; padding: 16px 20px; background: white; border-top: 1px solid #eeeeee; flex-shrink: 0;">
+            <button class="btn btn-secondary" id="back-btn" style="width: 100%;">돌아가기</button>
+        </div>
+
+        <!-- Loading Overlay (ride search) -->
+        <div id="loading-overlay" style="display: none; position: absolute; inset: 0; z-index: 2000; background: rgba(0,0,0,0.65); flex-direction: column; align-items: center; justify-content: center; gap: 28px;">
+            <div style="background: white; border-radius: 18px; padding: 18px 28px; font-size: 19px; font-weight: 700; color: #1a1a1a; box-shadow: 0 8px 32px rgba(0,0,0,0.25); text-align: center;">
+                가장 가까운 차량을 찾고 있어요.
+            </div>
+            <button id="cancel-call-btn" style="background: #6366f1; color: white; border: none; border-radius: 50px; padding: 18px 44px; font-size: 20px; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent;">
+                호출 취소
+            </button>
+        </div>
+
+        <!-- Custom System Dialog Overlay -->
+        <div class="system-dialog-overlay" id="system-dialog-overlay">
+            <div class="system-dialog">
+                <div class="system-dialog-message" id="system-dialog-message"></div>
+                <input type="text" class="system-dialog-input" id="system-dialog-input">
+                <div class="system-dialog-actions">
+                    <button class="system-dialog-btn btn-cancel" id="system-dialog-cancel">취소</button>
+                    <button class="system-dialog-btn btn-confirm" id="system-dialog-confirm">확인</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const listEl = document.getElementById('saved-stops-list');
+            const editBtn = document.getElementById('edit-btn');
+            
+            // Dialog DOM Elements
+            const dialogOverlay = document.getElementById('system-dialog-overlay');
+            const dialogMessage = document.getElementById('system-dialog-message');
+            const dialogInput = document.getElementById('system-dialog-input');
+            const dialogCancelBtn = document.getElementById('system-dialog-cancel');
+            const dialogConfirmBtn = document.getElementById('system-dialog-confirm');
+
+            let isEditMode = false;
+            let selectedOriginIdx = null;
+            let stops = [];
+            let dialogConfirmCallback = null;
+            let loadingTimer = null;
+
+            const mainTitle = document.getElementById('main-title');
+            const stopListHeader = document.getElementById('stop-list-header');
+            const bottomBar = document.getElementById('bottom-bar');
+            const backBtn = document.getElementById('back-btn');
+
+            function enterOriginSelectedMode(idx) {
+                selectedOriginIdx = idx;
+                isEditMode = false;
+                mainTitle.textContent = '어디로 갈까요?';
+                editBtn.style.display = 'none';
+                bottomBar.style.display = 'block';
+                triggerTitleAnimation();
+                renderStops();
+            }
+
+            function resetToOriginMode() {
+                selectedOriginIdx = null;
+                mainTitle.textContent = '어디서 출발할까요?';
+                editBtn.style.display = '';
+                editBtn.innerHTML = `정류장 편집 <i class="ph-bold ph-pencil-simple"></i>`;
+                bottomBar.style.display = 'none';
+                triggerTitleAnimation();
+                renderStops();
+            }
+
+            function triggerTitleAnimation() {
+                const icon = document.getElementById('title-icon');
+                const title = document.getElementById('main-title');
+                [icon, title].forEach(el => {
+                    el.style.animation = 'none';
+                    el.offsetHeight; // force reflow
+                    el.style.animation = '';
+                });
+            }
+
+            backBtn.addEventListener('click', resetToOriginMode);
+
+            // Loading overlay
+            const loadingOverlay = document.getElementById('loading-overlay');
+            document.getElementById('cancel-call-btn').addEventListener('click', () => {
+                clearTimeout(loadingTimer);
+                loadingOverlay.style.display = 'none';
+                resetToOriginMode();
+            });
+
+            function showLoadingOverlay() {
+                loadingOverlay.style.display = 'flex';
+                loadingTimer = setTimeout(() => {
+                    location.href = 'confirm.html';
+                }, 2000);
+            }
+
+            // Custom Dialog Engine
+            function showDialog({ message, type = 'alert', cancelText = '취소', confirmText = '확인', defaultValue = '', onConfirm }) {
+                dialogMessage.innerHTML = message;
+                dialogCancelBtn.innerText = cancelText;
+                dialogConfirmBtn.innerText = confirmText;
+                
+                if (type === 'prompt') {
+                    dialogInput.style.display = 'block';
+                    dialogInput.value = defaultValue;
+                } else {
+                    dialogInput.style.display = 'none';
+                    dialogInput.value = '';
+                }
+
+                if (type === 'alert') {
+                    dialogCancelBtn.style.display = 'none';
+                } else {
+                    dialogCancelBtn.style.display = 'block';
+                }
+
+                dialogConfirmCallback = onConfirm;
+                dialogOverlay.classList.add('active');
+                if (type === 'prompt') {
+                    setTimeout(() => dialogInput.focus(), 50);
+                }
+            }
+
+            function closeDialog() {
+                dialogOverlay.classList.remove('active');
+            }
+
+            dialogCancelBtn.addEventListener('click', closeDialog);
+            dialogConfirmBtn.addEventListener('click', () => {
+                if (dialogConfirmCallback) {
+                    const isPrompt = dialogInput.style.display === 'block';
+                    dialogConfirmCallback(isPrompt ? dialogInput.value : null);
+                }
+                closeDialog();
+            });
+
+            // Reflect saved passenger count in label
+            try {
+                const p = JSON.parse(sessionStorage.getItem('passengers') || 'null');
+                if (p) {
+                    const total = p.adult + p.teen + p.child;
+                    const parts = [];
+                    if (p.adult > 0)  parts.push(`성인 ${p.adult}명`);
+                    if (p.teen > 0)   parts.push(`청소년 ${p.teen}명`);
+                    if (p.child > 0)  parts.push(`어린이 ${p.child}명`);
+                    const label = document.getElementById('passenger-label');
+                    label.childNodes[0].textContent = (parts.length ? parts.join(', ') : '성인 1명') + ' ';
+                }
+            } catch(e) {}
+
+            try {
+                stops = JSON.parse(sessionStorage.getItem('savedStops') || '[]');
+                if (stops.length === 0) {
+                    stops = [
+                        {name: '집', original: '집', colorIndex: 0},
+                        {name: '복지관', original: '복지관', colorIndex: 1}
+                    ];
+                } else {
+                    // Migrate stops that lack a colorIndex
+                    stops.forEach((stop, idx) => {
+                        if (stop.colorIndex === undefined) stop.colorIndex = idx % 4;
+                    });
+                }
+            } catch(e) { console.error(e); }
+
+            const colors = ['#ef4444', '#22c55e', '#3b82f6', '#eab308']; // Red, Green, Blue, Yellow
+
+            function renderStops() {
+                listEl.innerHTML = '';
+
+                stops.forEach((stop, idx) => {
+                    const accent = colors[stop.colorIndex % colors.length];
+                    const isOrigin = selectedOriginIdx === idx;
+
+                    let cardInner;
+                    if (isOrigin) {
+                        cardInner = `
+                            <div style="display: flex; align-items: center; width: 100%; min-height: 28px;">
+                                <div class="stop-name">${stop.name}</div>
+                            </div>
+                            <div style="position: absolute; inset: -3px; background: rgba(0,0,0,0.55); border-radius: var(--border-radius-btn); display: flex; align-items: center; justify-content: center; gap: 10px;">
+                                <i class="ph-bold ph-check-circle" style="font-size: 24px; color: white;"></i>
+                                <span style="color: white; font-size: 22px; font-weight: 700;">여기서 출발</span>
+                            </div>
+                        `;
+                    } else if (isEditMode) {
+                        cardInner = `
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 28px;">
+                                <div class="stop-name" style="flex: 1; margin-right: 16px;">${stop.name}</div>
+                                <div class="edit-actions" style="display: flex; gap: 20px; color: white;">
+                                    <i class="ph-bold ph-pencil-simple" style="font-size: 28px;" onclick="renameStop(event, ${idx})"></i>
+                                    <i class="ph-bold ph-trash" style="font-size: 28px;" onclick="deleteStop(event, ${idx})"></i>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        cardInner = `
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 28px;">
+                                <div class="stop-name" style="flex: 1;">${stop.name}</div>
+                            </div>
+                        `;
+                    }
+
+                    const isDestinationMode = !isEditMode && selectedOriginIdx !== null && !isOrigin;
+                    const clickHandler = (!isEditMode && selectedOriginIdx === null)
+                        ? `onclick="selectOrigin(${idx})"`
+                        : isDestinationMode
+                        ? `onclick="selectDestination(${idx})"`
+                        : '';
+                    const cursor = (!isEditMode && (selectedOriginIdx === null || isDestinationMode)) ? 'cursor: pointer;' : '';
+                    const bgOverride = isOrigin ? 'background-color: color-mix(in srgb, var(--color-btn-primary-bg) 30%, white);' : '';
+
+                    listEl.innerHTML += `
+                        <div class="saved-stop-card" style="--accent-color: ${accent}; display: flex; align-items: center; ${cursor} ${bgOverride}" ${clickHandler}>
+                            ${cardInner}
+                        </div>
+                    `;
+                });
+
+                // Inject Add Stop button — hidden in edit mode and origin-selected mode
+                if (!isEditMode && selectedOriginIdx === null && stops.length < 4) {
+                    listEl.innerHTML += `
+                        <div class="add-more-stop" style="background: transparent; padding: 16px; text-align: center; flex-shrink: 0;">
+                            <button class="add-stop-btn" onclick="location.href='map.html'" style="display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--color-text-main); font-weight: 700; font-size: 20px; cursor: pointer;">
+                                <i class="ph-bold ph-plus-circle" style="color: var(--color-brand-navy);"></i> 정류장 추가
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+
+            editBtn.addEventListener('click', () => {
+                if (selectedOriginIdx !== null) return;
+                isEditMode = !isEditMode;
+                if (isEditMode) {
+                    editBtn.innerHTML = `완료 <i class="ph-bold ph-check"></i>`;
+                } else {
+                    editBtn.innerHTML = `정류장 편집 <i class="ph-bold ph-pencil-simple"></i>`;
+                }
+                renderStops();
+            });
+
+            window.selectOrigin = function(idx) {
+                enterOriginSelectedMode(idx);
+            };
+
+            window.selectDestination = function(idx) {
+                sessionStorage.setItem('rideOrigin', JSON.stringify(stops[selectedOriginIdx]));
+                sessionStorage.setItem('rideDestination', JSON.stringify(stops[idx]));
+                showLoadingOverlay();
+            };
+
+            window.renameStop = function(event, idx) {
+                event.stopPropagation();
+                showDialog({
+                    type: 'prompt',
+                    message: '새로운 정류장 이름을 입력해주세요.',
+                    defaultValue: stops[idx].name,
+                    onConfirm: (newName) => {
+                        if (newName && newName.trim()) {
+                            stops[idx].name = newName.trim();
+                            sessionStorage.setItem('savedStops', JSON.stringify(stops));
+                            renderStops();
+                        }
+                    }
+                });
+            };
+
+            window.deleteStop = function(event, idx) {
+                event.stopPropagation();
+                if (stops.length <= 2) {
+                    showDialog({
+                        type: 'confirm',
+                        message: '최소 2개의 정류장이 필요합니다.\n이 정류장을 삭제하고 새로 추가하시겠습니까?',
+                        cancelText: '취소',
+                        confirmText: '삭제 후 추가',
+                        onConfirm: () => {
+                            stops.splice(idx, 1);
+                            sessionStorage.setItem('savedStops', JSON.stringify(stops));
+                            location.href = 'map.html';
+                        }
+                    });
+                    return;
+                }
+                
+                showDialog({
+                    type: 'confirm',
+                    message: `'${stops[idx].name}' 정류장을\n삭제하시겠습니까?`,
+                    onConfirm: () => {
+                        stops.splice(idx, 1);
+                        sessionStorage.setItem('savedStops', JSON.stringify(stops));
+                        renderStops();
+                    }
+                });
+            };
+
+            renderStops();
+        });
+
+        function resetAndGoHome() {
+            sessionStorage.clear();
+            location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

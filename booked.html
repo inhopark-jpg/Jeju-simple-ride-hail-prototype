@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>제주 간편 모드 - 예약 완료</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        .route-pill {
+            background: #2d2f3a;
+            color: white;
+            border-radius: 50px;
+            padding: 10px 22px;
+            font-size: 18px;
+            font-weight: 700;
+            display: inline-block;
+            text-align: center;
+        }
+        .route-arrow {
+            font-size: 16px;
+            color: #2d2f3a;
+            margin: 0 6px;
+            flex-shrink: 0;
+        }
+        #main-title {
+            -webkit-tap-highlight-color: transparent;
+        }
+        @keyframes pulse-attention {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .text-pulse {
+            display: inline-block;
+            animation: pulse-attention 1.4s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <main class="mobile-frame" style="background-color: white;">
+        <div id="scroll-area" style="flex: 1; overflow-y: auto; padding: 56px 20px 20px; display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- Main title -->
+            <div id="main-title" class="text-center"></div>
+
+            <!-- Info card -->
+            <div id="info-card" style="background: #f4f5f7; border-radius: 20px; padding: 20px;"></div>
+
+            <!-- Seat card -->
+            <div id="seat-card" style="display:none; background: #f4f5f7; border-radius: 20px; padding: 20px 20px 24px; text-align: center;">
+                <div style="font-size: 15px; color: #888; font-weight: 600; margin-bottom: 4px;">좌석</div>
+                <div style="font-size: 48px; font-weight: 800; color: var(--color-brand-navy); letter-spacing: -1px;">5번</div>
+            </div>
+
+            <!-- Bus stop street view -->
+            <img src="bus stop.png" alt="승차 정류장" style="width: 100%; border-radius: 16px; object-fit: cover; display: block;">
+
+            <!-- Action button — hidden when btnText is null -->
+            <button id="action-btn" class="btn btn-primary" style="flex-direction: column; gap: 4px; height: auto; padding: 18px 20px; display: none;">
+                <span id="action-btn-label" style="font-size: 22px; font-weight: 800;"></span>
+                <span id="action-btn-sub" style="font-size: 14px; font-weight: 500; opacity: 0.7; display: none;"></span>
+            </button>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let originName = '집';
+            let destinationName = '복지관';
+            let endCountdown = null;
+
+            try {
+                const origin = JSON.parse(sessionStorage.getItem('rideOrigin') || 'null');
+                const destination = JSON.parse(sessionStorage.getItem('rideDestination') || 'null');
+                if (origin) originName = origin.name;
+                if (destination) destinationName = destination.name;
+            } catch(e) {}
+
+            function compactRouteCard(origin, dest) {
+                return `<div style="display:flex; align-items:center; justify-content:center; margin-bottom:12px;">
+                            <span class="route-pill">${origin}</span>
+                            <span class="route-arrow">▶</span>
+                            <span class="route-pill">${dest}</span>
+                        </div>
+                        <div style="text-align:center; font-size:14px; color:#888;">
+                            오전 8:45 승차 ~ 오전 8:45 하차 예상
+                        </div>`;
+            }
+
+            // States: title html, infoCard html, showSeat, btn ('cancel'|'end'|null)
+            const states = [
+                {
+                    titleHtml: `<div style="font-size:30px; font-weight:800; color:#1a1a1a; letter-spacing:-0.6px; cursor:pointer;">오전 9:30 ~ 오전 10:00</div>
+                                <div style="font-size:18px; font-weight:700; color:var(--color-brand-navy); margin-top:6px;">사이에 승차</div>`,
+                    infoCard: `<div style="display:flex; align-items:center; justify-content:center; margin-bottom:16px;">
+                                   <span class="route-pill">${originName}</span>
+                                   <span class="route-arrow">▶</span>
+                                   <span class="route-pill">${destinationName}</span>
+                               </div>
+                               <div style="border-top:1px solid #e5e7eb; padding-top:14px; text-align:center; font-size:15px; color:#666; line-height:1.6;">
+                                   오전 9:20에 정확한 승차 시간을 안내드립니다.
+                               </div>`,
+                    showSeat: false,
+                    btn: 'cancel',
+                    clickable: true,
+                },
+                {
+                    titleHtml: `<div style="font-size:36px; font-weight:800; color:#1a1a1a; letter-spacing:-0.8px; cursor:pointer;">10분 후 도착</div>`,
+                    infoCard: compactRouteCard(originName, destinationName),
+                    showSeat: true,
+                    btn: 'cancel',
+                    clickable: true,
+                },
+                {
+                    titleHtml: `<div style="font-size:36px; font-weight:800; color:#1a1a1a; letter-spacing:-0.8px; cursor:pointer;">곧 도착</div>`,
+                    infoCard: compactRouteCard(originName, destinationName),
+                    showSeat: true,
+                    btn: 'cancel',
+                    clickable: true,
+                },
+                {
+                    titleHtml: `<div class="text-pulse" style="font-size:42px; font-weight:800; color:#1a1a1a; letter-spacing:-0.8px; cursor:pointer;">차량이 도착했습니다</div>`,
+                    infoCard: compactRouteCard(originName, destinationName),
+                    showSeat: true,
+                    btn: 'cancel',
+                    clickable: true,
+                },
+                {
+                    titleHtml: `<div style="font-size:36px; font-weight:800; color:#1a1a1a; letter-spacing:-0.8px;">10분 후 도착</div>`,
+                    infoCard: compactRouteCard(originName, destinationName),
+                    showSeat: true,
+                    btn: null,
+                    clickable: true,
+                },
+                {
+                    titleHtml: `<div style="font-size:36px; font-weight:800; color:#1a1a1a; letter-spacing:-0.8px;">목적지 도착</div>`,
+                    infoCard: compactRouteCard(originName, destinationName),
+                    showSeat: true,
+                    btn: 'end',
+                    clickable: false,
+                },
+            ];
+
+            let currentState = 0;
+
+            const mainTitleEl = document.getElementById('main-title');
+            const infoCardEl  = document.getElementById('info-card');
+            const seatCardEl  = document.getElementById('seat-card');
+            const actionBtn   = document.getElementById('action-btn');
+            const btnLabel    = document.getElementById('action-btn-label');
+            const btnSub      = document.getElementById('action-btn-sub');
+
+            function clearEndCountdown() {
+                if (endCountdown) { clearInterval(endCountdown); endCountdown = null; }
+            }
+
+            function startEndCountdown() {
+                let secs = 30;
+                btnSub.textContent = `${secs}초 후 자동으로 이용 종료`;
+                btnSub.style.display = 'block';
+                endCountdown = setInterval(() => {
+                    secs--;
+                    if (secs <= 0) { clearEndCountdown(); endRide(); }
+                    else btnSub.textContent = `${secs}초 후 자동으로 이용 종료`;
+                }, 1000);
+            }
+
+            function render() {
+                clearEndCountdown();
+                const s = states[currentState];
+
+                mainTitleEl.innerHTML = s.titleHtml;
+                mainTitleEl.onclick = s.clickable ? cycleState : null;
+                mainTitleEl.style.cursor = s.clickable ? 'pointer' : 'default';
+
+                infoCardEl.innerHTML = s.infoCard;
+                seatCardEl.style.display = s.showSeat ? 'block' : 'none';
+
+                if (s.btn === 'cancel') {
+                    actionBtn.style.display = 'flex';
+                    btnLabel.textContent = '호출 취소';
+                    btnSub.style.display = 'none';
+                    actionBtn.onclick = () => {
+                        sessionStorage.removeItem('rideOrigin');
+                        sessionStorage.removeItem('rideDestination');
+                        location.href = 'home.html';
+                    };
+                    // State 0 uses "예약 취소" label
+                    if (currentState === 0) btnLabel.textContent = '예약 취소';
+                } else if (s.btn === 'end') {
+                    actionBtn.style.display = 'flex';
+                    btnLabel.textContent = '이용 종료';
+                    actionBtn.onclick = endRide;
+                    startEndCountdown();
+                } else {
+                    actionBtn.style.display = 'none';
+                }
+            }
+
+            function endRide() {
+                clearEndCountdown();
+                sessionStorage.removeItem('rideOrigin');
+                sessionStorage.removeItem('rideDestination');
+                location.href = 'home.html';
+            }
+
+            function cycleState() {
+                if (currentState < states.length - 1) {
+                    currentState++;
+                    render();
+                }
+            }
+
+            render();
+        });
+    </script>
+</body>
+</html>

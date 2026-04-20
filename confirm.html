@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>제주 간편 모드 - 예약 확인</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        #main-title {
+            opacity: 0;
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .info-card {
+            background: #f4f5f7;
+            border-radius: 20px;
+            padding: 24px 20px;
+        }
+        .route-pill {
+            background: #2d2f3a;
+            color: white;
+            border-radius: 50px;
+            padding: 10px 22px;
+            font-size: 20px;
+            font-weight: 700;
+            display: inline-block;
+        }
+        .route-arrow {
+            font-size: 18px;
+            color: #2d2f3a;
+            margin: 0 8px;
+        }
+    </style>
+</head>
+<body>
+    <main class="mobile-frame" style="background-color: #f4f5f7;">
+        <!-- Header -->
+        <header class="home-header">
+            <button class="hamburger-btn">
+                <i class="ph-bold ph-list" style="font-size: 28px; color: var(--color-text-main);"></i>
+            </button>
+            <div class="home-actions">
+                <button class="pill-btn" onclick="resetAndGoHome()">일반 모드 전환</button>
+                <button class="pill-btn"><i class="ph-fill ph-phone-call"></i> 고객 센터</button>
+            </div>
+        </header>
+
+        <div class="content dashboard-content" style="padding: 0; padding-top: 40px; display: flex; flex-direction: column;">
+            <!-- Title -->
+            <div class="text-center" style="margin-bottom: 32px; padding: 0 20px;">
+                <h2 id="main-title" style="font-size: 34px; font-weight: 800; color: var(--color-brand-text); margin: 0; letter-spacing: -0.8px; line-height: 1.3;">예약을 확정할까요?</h2>
+            </div>
+
+            <!-- White card section -->
+            <div style="background: white; border-top-left-radius: 24px; border-top-right-radius: 24px; flex: 1; padding: 32px 20px 20px; display: flex; flex-direction: column; gap: 24px;">
+                <!-- Time window -->
+                <div class="text-center">
+                    <div style="font-size: 30px; font-weight: 800; color: #1a1a1a; letter-spacing: -0.6px;">
+                        오전 9:30 ~ 오전 10:00
+                    </div>
+                    <div style="font-size: 18px; font-weight: 600; color: #666; margin-top: 6px;">사이에 승차</div>
+                </div>
+
+                <!-- Route & notification info -->
+                <div class="info-card">
+                    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                        <span class="route-pill" id="origin-pill">집</span>
+                        <span class="route-arrow">▶</span>
+                        <span class="route-pill" id="destination-pill">복지관</span>
+                    </div>
+                    <div style="border-top: 1px solid #e5e7eb; padding-top: 14px; text-align: center; font-size: 15px; color: #666; line-height: 1.6;">
+                        오전 9:20에 정확한 승차 시간을 안내드립니다.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Buttons -->
+        <div style="padding: 0 20px 16px; background: white; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px;">
+            <button class="btn btn-primary" id="confirm-btn" style="flex-direction: column; gap: 4px; height: auto; padding: 18px 20px;" onclick="confirmBooking()">
+                <span style="font-size: 22px; font-weight: 800;">예약하기</span>
+                <span id="countdown-label" style="font-size: 14px; font-weight: 500; opacity: 0.7;">30초 후 자동으로 예약</span>
+            </button>
+            <button class="btn btn-secondary" onclick="history.back()">돌아가기</button>
+        </div>
+
+        <!-- Completion overlay — same format as map.html -->
+        <div id="complete-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 9999; flex-direction: column; align-items: center; justify-content: center;">
+            <div style="width: 100px; height: 100px; border-radius: 50%; background-color: white; display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+                <i class="ph-bold ph-check" style="color: var(--color-brand-navy); font-size: 60px;"></i>
+            </div>
+            <div style="color: white; font-size: 28px; font-weight: 800; text-align: center; line-height: 1.4; letter-spacing: -0.5px;">예약이<br>완료되었습니다</div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const origin = JSON.parse(sessionStorage.getItem('rideOrigin') || 'null');
+                const destination = JSON.parse(sessionStorage.getItem('rideDestination') || 'null');
+                if (origin) document.getElementById('origin-pill').textContent = origin.name;
+                if (destination) document.getElementById('destination-pill').textContent = destination.name;
+            } catch(e) {}
+
+            let secondsLeft = 30;
+            const countdownLabel = document.getElementById('countdown-label');
+
+            const countdown = setInterval(() => {
+                secondsLeft--;
+                if (secondsLeft <= 0) {
+                    confirmBooking();
+                } else {
+                    countdownLabel.textContent = `${secondsLeft}초 후 자동으로 예약`;
+                }
+            }, 1000);
+
+            window.confirmBooking = function() {
+                clearInterval(countdown);
+                const overlay = document.getElementById('complete-overlay');
+                overlay.style.display = 'flex';
+                setTimeout(() => {
+                    location.href = 'booked.html';
+                }, 2000);
+            };
+        });
+
+        function resetAndGoHome() {
+            sessionStorage.clear();
+            location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
