@@ -250,6 +250,9 @@
             detectRetina: true
         }).addTo(map);
 
+        // Ensure map fills container after layout settles
+        setTimeout(() => map.invalidateSize(), 100);
+
         document.getElementById('my-location-btn').addEventListener('click', () => {
             map.flyTo(OSONG_CENTER, 16, { animate: true, duration: 0.6 });
         });
