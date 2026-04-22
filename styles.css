@@ -29,6 +29,10 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -362,11 +366,11 @@ p.body-text {
 }
 
 .modal-title-main {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 800;
   color: var(--color-brand-navy);
   margin-bottom: 4px;
-  padding-right: 24px; /* avoid close btn */
+  padding-right: 32px; /* avoid close btn */
 }
 
 .modal-subtitle {
@@ -427,6 +431,26 @@ p.body-text {
 }
 .modal-btn:hover {
   background: var(--color-brand-navy-hover);
+}
+
+/* Nickname chips in map modal */
+.nickname-chip {
+  padding: 8px 16px;
+  border-radius: 50px;
+  border: 1.5px solid #d1d5db;
+  background: white;
+  font-size: 15px;
+  font-weight: 600;
+  color: #444;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.nickname-chip.selected {
+  border-color: var(--color-brand-navy);
+  background: var(--color-brand-navy);
+  color: white;
 }
 
 /* Toast Messages */

@@ -21,15 +21,50 @@
             background: #2d2f3a;
             color: white;
             border-radius: 50px;
-            padding: 10px 22px;
-            font-size: 20px;
+            padding: 7px 16px;
+            font-size: 15px;
             font-weight: 700;
             display: inline-block;
         }
         .route-arrow {
-            font-size: 18px;
+            font-size: 14px;
             color: #2d2f3a;
-            margin: 0 8px;
+            margin: 0 6px;
+        }
+        @keyframes slide-in-from-right {
+            from { opacity: 0; transform: translateX(24px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slide-in-from-left {
+            from { opacity: 0; transform: translateX(-24px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        .slide-from-right { animation: slide-in-from-right 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .slide-from-left  { animation: slide-in-from-left  0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        #time-wrapper {
+            overflow: hidden;
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #time-display {
+            font-size: 26px;
+            font-weight: 800;
+            color: #1a1a1a;
+            letter-spacing: -0.4px;
+            white-space: nowrap;
+            display: inline-block;
+        }
+        @keyframes marquee-bounce {
+            0%, 10%   { transform: translateX(0); }
+            90%, 100% { transform: translateX(var(--marquee-offset, 0px)); }
+        }
+        #time-display.marquee-active {
+            animation: marquee-bounce 2.8s ease-in-out infinite alternate;
+            align-self: flex-start;
         }
     </style>
 </head>
@@ -54,10 +89,16 @@
 
             <!-- White card section -->
             <div style="background: white; border-top-left-radius: 24px; border-top-right-radius: 24px; flex: 1; padding: 32px 20px 20px; display: flex; flex-direction: column; gap: 24px;">
-                <!-- Time window -->
+                <!-- Time window carousel -->
                 <div class="text-center">
-                    <div style="font-size: 30px; font-weight: 800; color: #1a1a1a; letter-spacing: -0.6px;">
-                        오전 9:30 ~ 오전 10:00
+                    <div style="display: flex; align-items: center; gap: 4px; margin: 0 -20px;">
+                        <button id="time-prev" onclick="changeSlot(-1)" style="background: none; border: none; cursor: pointer; padding: 8px; flex-shrink: 0; color: #1a1a1a; -webkit-tap-highlight-color: transparent;">
+                            <i class="ph-bold ph-caret-left" style="font-size: 32px;"></i>
+                        </button>
+                        <div id="time-wrapper"><div id="time-display"></div></div>
+                        <button id="time-next" onclick="changeSlot(1)" style="background: none; border: none; cursor: pointer; padding: 8px; flex-shrink: 0; color: #1a1a1a; -webkit-tap-highlight-color: transparent;">
+                            <i class="ph-bold ph-caret-right" style="font-size: 32px;"></i>
+                        </button>
                     </div>
                     <div style="font-size: 18px; font-weight: 600; color: #666; margin-top: 6px;">사이에 승차</div>
                 </div>
@@ -69,7 +110,7 @@
                         <span class="route-arrow">▶</span>
                         <span class="route-pill" id="destination-pill">복지관</span>
                     </div>
-                    <div style="border-top: 1px solid #e5e7eb; padding-top: 14px; text-align: center; font-size: 15px; color: #666; line-height: 1.6;">
+                    <div id="notify-text" style="border-top: 1px solid #e5e7eb; padding-top: 14px; text-align: center; font-size: 15px; color: #666; line-height: 1.6;">
                         오전 9:20에 정확한 승차 시간을 안내드립니다.
                     </div>
                 </div>
@@ -78,9 +119,8 @@
 
         <!-- Bottom Buttons -->
         <div style="padding: 0 20px 16px; background: white; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px;">
-            <button class="btn btn-primary" id="confirm-btn" style="flex-direction: column; gap: 4px; height: auto; padding: 18px 20px;" onclick="confirmBooking()">
+            <button class="btn btn-primary" id="confirm-btn" style="height: auto; padding: 18px 20px;" onclick="confirmBooking()">
                 <span style="font-size: 22px; font-weight: 800;">예약하기</span>
-                <span id="countdown-label" style="font-size: 14px; font-weight: 500; opacity: 0.7;">30초 후 자동으로 예약</span>
             </button>
             <button class="btn btn-secondary" onclick="history.back()">돌아가기</button>
         </div>
@@ -103,20 +143,74 @@
                 if (destination) document.getElementById('destination-pill').textContent = destination.name;
             } catch(e) {}
 
-            let secondsLeft = 30;
-            const countdownLabel = document.getElementById('countdown-label');
+            // Time slot carousel — 30-min intervals starting at 9:30
+            const slots = [];
+            for (let h = 9; h <= 17; h++) {
+                slots.push({ start: [h, 30], end: [h + 1, 0] });
+                if (h < 17) slots.push({ start: [h + 1, 0], end: [h + 1, 30] });
+            }
+            // Start at 오전 9:30 ~ 오전 10:00
+            let slotIdx = 0;
 
-            const countdown = setInterval(() => {
-                secondsLeft--;
-                if (secondsLeft <= 0) {
-                    confirmBooking();
-                } else {
-                    countdownLabel.textContent = `${secondsLeft}초 후 자동으로 예약`;
+            function formatTime([h, m]) {
+                const period = h < 12 ? '오전' : '오후';
+                const hh = h <= 12 ? h : h - 12;
+                const mm = m === 0 ? '00' : m;
+                return `${period} ${hh}:${mm}`;
+            }
+
+            function notifyTime([h, m]) {
+                // 10 minutes before pickup start
+                let nm = m - 10;
+                let nh = h;
+                if (nm < 0) { nm += 60; nh--; }
+                return formatTime([nh, nm]);
+            }
+
+            function renderSlot(animClass) {
+                const s = slots[slotIdx];
+                const el = document.getElementById('time-display');
+                const wrapper = document.getElementById('time-wrapper');
+
+                // Re-trigger slide animation by removing class, forcing reflow, re-adding
+                if (animClass) {
+                    el.classList.remove('slide-from-right', 'slide-from-left', 'marquee-active');
+                    el.offsetHeight; // reflow
+                    el.classList.add(animClass);
                 }
-            }, 1000);
+
+                el.textContent = `${formatTime(s.start)} ~ ${formatTime(s.end)}`;
+                document.getElementById('notify-text').textContent =
+                    `${notifyTime(s.start)}에 정확한 승차 시간을 안내드립니다.`;
+                document.getElementById('time-prev').style.opacity = slotIdx === 0 ? '0.3' : '1';
+                document.getElementById('time-next').style.opacity = slotIdx === slots.length - 1 ? '0.3' : '1';
+
+                // Check overflow and toggle marquee after paint
+                requestAnimationFrame(() => {
+                    const overflowing = el.scrollWidth > wrapper.clientWidth;
+                    if (overflowing) {
+                        const offset = -(el.scrollWidth - wrapper.clientWidth);
+                        el.style.setProperty('--marquee-offset', offset + 'px');
+                        el.classList.remove('marquee-active');
+                        el.offsetHeight; // reflow to restart animation
+                        el.classList.add('marquee-active');
+                    } else {
+                        el.classList.remove('marquee-active');
+                        el.style.removeProperty('--marquee-offset');
+                    }
+                });
+            }
+
+            window.changeSlot = function(dir) {
+                const next = slotIdx + dir;
+                if (next < 0 || next >= slots.length) return;
+                slotIdx = next;
+                renderSlot(dir > 0 ? 'slide-from-right' : 'slide-from-left');
+            };
+
+            renderSlot();
 
             window.confirmBooking = function() {
-                clearInterval(countdown);
                 const overlay = document.getElementById('complete-overlay');
                 overlay.style.display = 'flex';
                 setTimeout(() => {

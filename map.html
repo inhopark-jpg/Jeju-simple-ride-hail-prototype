@@ -57,12 +57,18 @@
             <div id="custom-name-modal" class="custom-name-modal">
                 <div class="modal-header">
                     <div class="modal-title-main" id="modal-stop-name">내수북이263번 | 신대1구노인정</div>
-                    <div class="modal-subtitle" id="modal-stop-sub">내수북이263번 | 신대1구노인정</div>
                     <button class="modal-close" id="modal-close-btn">✕</button>
                 </div>
                 <div class="modal-body">
+                    <div style="font-size: 14px; font-weight: 600; color: #444; margin-bottom: 10px;">정류장의 별명을 정해주세요</div>
+                    <div id="nickname-chips" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+                        <button class="nickname-chip" data-value="집">집</button>
+                        <button class="nickname-chip" data-value="일터">일터</button>
+                        <button class="nickname-chip" data-value="병원">병원</button>
+                        <button class="nickname-chip" data-value="마트">마트</button>
+                    </div>
                     <div class="modal-input-wrapper">
-                        <input type="text" id="custom-name-input" placeholder="정류장 이름을 입력해주세요">
+                        <input type="text" id="custom-name-input" placeholder="직접 입력">
                         <button class="modal-input-clear" id="modal-clear-btn" style="display:none;">✕</button>
                     </div>
                 </div>
@@ -114,7 +120,6 @@
         const modal = document.getElementById('custom-name-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
         const modalStopName = document.getElementById('modal-stop-name');
-        const modalStopSub = document.getElementById('modal-stop-sub');
         const customNameInput = document.getElementById('custom-name-input');
         const modalClearBtn = document.getElementById('modal-clear-btn');
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
@@ -133,11 +138,11 @@
         // Modal Handlers
         function showModal(stopName) {
             modalStopName.innerText = stopName;
-            modalStopSub.innerText = stopName;
             modal.classList.add('is-active');
             guideSnackbar.classList.add('hidden');
             customNameInput.value = "";
             modalClearBtn.style.display = "none";
+            document.querySelectorAll('.nickname-chip').forEach(c => c.classList.remove('selected'));
         }
         
         function hideModal() {
@@ -147,14 +152,26 @@
 
         modalCloseBtn.addEventListener('click', hideModal);
 
-        customNameInput.addEventListener('input', (e) => {
-            modalClearBtn.style.display = e.target.value.length > 0 ? 'block' : 'none';
-        });
-
         modalClearBtn.addEventListener('click', () => {
             customNameInput.value = '';
             modalClearBtn.style.display = 'none';
             customNameInput.focus();
+        });
+
+        // Nickname chips
+        document.querySelectorAll('.nickname-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('.nickname-chip').forEach(c => c.classList.remove('selected'));
+                chip.classList.add('selected');
+                customNameInput.value = chip.dataset.value;
+                modalClearBtn.style.display = 'block';
+            });
+        });
+
+        customNameInput.addEventListener('input', (e) => {
+            modalClearBtn.style.display = e.target.value.length > 0 ? 'block' : 'none';
+            // Deselect chips if user types manually
+            document.querySelectorAll('.nickname-chip').forEach(c => c.classList.remove('selected'));
         });
 
         modalConfirmBtn.addEventListener('click', () => {

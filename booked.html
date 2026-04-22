@@ -35,9 +35,46 @@
             display: inline-block;
             animation: pulse-attention 1.4s ease-in-out infinite;
         }
+        .scene-nav-btn {
+            display: none;
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: white;
+            border: none;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.15);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: #1a1a1a;
+            transition: box-shadow 0.15s, transform 0.15s;
+        }
+        .scene-nav-btn:hover {
+            box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+            transform: translateY(-50%) scale(1.06);
+        }
+        .scene-nav-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+        .scene-nav-btn:disabled:hover {
+            box-shadow: 0 2px 16px rgba(0,0,0,0.15);
+            transform: translateY(-50%);
+        }
+        @media (min-width: 600px) {
+            .scene-nav-btn { display: flex; }
+            #scene-prev { left: calc(50% - 195px - 68px); }
+            #scene-next { right: calc(50% - 195px - 68px); }
+        }
     </style>
 </head>
 <body>
+    <button class="scene-nav-btn" id="scene-prev" aria-label="이전"><i class="ph-bold ph-caret-left" style="font-size:22px;"></i></button>
+    <button class="scene-nav-btn" id="scene-next" aria-label="다음"><i class="ph-bold ph-caret-right" style="font-size:22px;"></i></button>
     <main class="mobile-frame" style="background-color: white;">
         <div id="scroll-area" style="flex: 1; overflow-y: auto; padding: 56px 20px 20px; display: flex; flex-direction: column; gap: 24px;">
 
@@ -48,9 +85,18 @@
             <div id="info-card" style="background: #f4f5f7; border-radius: 20px; padding: 20px;"></div>
 
             <!-- Seat card -->
-            <div id="seat-card" style="display:none; background: #f4f5f7; border-radius: 20px; padding: 20px 20px 24px; text-align: center;">
-                <div style="font-size: 15px; color: #888; font-weight: 600; margin-bottom: 4px;">좌석</div>
-                <div style="font-size: 48px; font-weight: 800; color: var(--color-brand-navy); letter-spacing: -1px;">5번</div>
+            <div id="seat-card" style="display:none; background: #f4f5f7; border-radius: 20px; padding: 20px 20px 24px;">
+                <div style="display: flex; align-items: center; justify-content: center;">
+                    <div style="text-align: center; padding: 0 28px;">
+                        <div style="font-size: 14px; color: #888; font-weight: 600; margin-bottom: 4px;">좌석</div>
+                        <div style="font-size: 36px; font-weight: 800; color: var(--color-brand-navy); letter-spacing: -1px;">5번</div>
+                    </div>
+                    <div style="width: 1px; height: 52px; background: #d1d5db; flex-shrink: 0;"></div>
+                    <div style="text-align: center; padding: 0 28px;">
+                        <div style="font-size: 14px; color: #888; font-weight: 600; margin-bottom: 4px;">차량</div>
+                        <div style="font-size: 36px; font-weight: 800; color: var(--color-brand-navy); letter-spacing: -1px;">2호차</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Bus stop street view -->
@@ -62,6 +108,17 @@
                 <span id="action-btn-sub" style="font-size: 14px; font-weight: 500; opacity: 0.7; display: none;"></span>
             </button>
         </div>
+
+        <!-- Cancellation Confirmation Dialog -->
+        <div class="system-dialog-overlay" id="cancel-dialog-overlay">
+            <div class="system-dialog">
+                <div class="system-dialog-message" id="cancel-dialog-message"></div>
+                <div class="system-dialog-actions">
+                    <button class="system-dialog-btn btn-cancel" id="cancel-dialog-no">취소</button>
+                    <button class="system-dialog-btn btn-confirm" id="cancel-dialog-yes">확인</button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -69,6 +126,24 @@
             let originName = '집';
             let destinationName = '복지관';
             let endCountdown = null;
+
+            // Cancellation dialog
+            const cancelDialogOverlay = document.getElementById('cancel-dialog-overlay');
+            const cancelDialogMessage = document.getElementById('cancel-dialog-message');
+            document.getElementById('cancel-dialog-no').addEventListener('click', () => {
+                cancelDialogOverlay.classList.remove('active');
+            });
+            let cancelDialogCallback = null;
+            document.getElementById('cancel-dialog-yes').addEventListener('click', () => {
+                cancelDialogOverlay.classList.remove('active');
+                if (cancelDialogCallback) cancelDialogCallback();
+            });
+
+            function confirmCancel(message, onConfirm) {
+                cancelDialogMessage.textContent = message;
+                cancelDialogCallback = onConfirm;
+                cancelDialogOverlay.classList.add('active');
+            }
 
             try {
                 const origin = JSON.parse(sessionStorage.getItem('rideOrigin') || 'null');
@@ -150,6 +225,22 @@
             const actionBtn   = document.getElementById('action-btn');
             const btnLabel    = document.getElementById('action-btn-label');
             const btnSub      = document.getElementById('action-btn-sub');
+            const scenePrev   = document.getElementById('scene-prev');
+            const sceneNext   = document.getElementById('scene-next');
+
+            function updateNavBtns() {
+                scenePrev.disabled = currentState === 0;
+                sceneNext.disabled = currentState >= states.length - 1 || !states[currentState].clickable;
+            }
+
+            scenePrev.addEventListener('click', () => {
+                if (currentState > 0) { currentState--; render(); }
+            });
+            sceneNext.addEventListener('click', () => {
+                if (currentState < states.length - 1 && states[currentState].clickable) {
+                    currentState++; render();
+                }
+            });
 
             function clearEndCountdown() {
                 if (endCountdown) { clearInterval(endCountdown); endCountdown = null; }
@@ -179,23 +270,33 @@
 
                 if (s.btn === 'cancel') {
                     actionBtn.style.display = 'flex';
-                    btnLabel.textContent = '호출 취소';
+                    actionBtn.className = 'btn btn-secondary';
+                    btnLabel.style.color = '#e53e3e';
                     btnSub.style.display = 'none';
+                    const isReservation = currentState === 0;
+                    btnLabel.textContent = isReservation ? '예약 취소' : '호출 취소';
+                    const cancelMsg = isReservation
+                        ? '예약을 취소하시겠습니까?'
+                        : '호출을 취소하시겠습니까?';
                     actionBtn.onclick = () => {
-                        sessionStorage.removeItem('rideOrigin');
-                        sessionStorage.removeItem('rideDestination');
-                        location.href = 'home.html';
+                        confirmCancel(cancelMsg, () => {
+                            sessionStorage.removeItem('rideOrigin');
+                            sessionStorage.removeItem('rideDestination');
+                            location.href = 'home.html';
+                        });
                     };
-                    // State 0 uses "예약 취소" label
-                    if (currentState === 0) btnLabel.textContent = '예약 취소';
                 } else if (s.btn === 'end') {
                     actionBtn.style.display = 'flex';
+                    actionBtn.className = 'btn btn-primary';
+                    btnLabel.style.color = '';
                     btnLabel.textContent = '이용 종료';
                     actionBtn.onclick = endRide;
                     startEndCountdown();
                 } else {
                     actionBtn.style.display = 'none';
                 }
+
+                updateNavBtns();
             }
 
             function endRide() {

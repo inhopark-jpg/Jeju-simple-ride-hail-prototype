@@ -242,8 +242,9 @@
                         `;
                     } else if (isEditMode) {
                         cardInner = `
-                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 28px;">
-                                <div class="stop-name" style="flex: 1; margin-right: 16px;">${stop.name}</div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 28px; touch-action: none;">
+                                <i class="ph-bold ph-dots-six-vertical drag-handle" style="font-size: 28px; color: rgba(255,255,255,0.6); cursor: grab; flex-shrink: 0; margin-right: 10px; touch-action: none;"></i>
+                                <div class="stop-name" style="flex: 1; margin-right: 12px;">${stop.name}</div>
                                 <div class="edit-actions" style="display: flex; gap: 20px; color: white;">
                                     <i class="ph-bold ph-pencil-simple" style="font-size: 28px;" onclick="renameStop(event, ${idx})"></i>
                                     <i class="ph-bold ph-trash" style="font-size: 28px;" onclick="deleteStop(event, ${idx})"></i>
@@ -267,8 +268,9 @@
                     const cursor = (!isEditMode && (selectedOriginIdx === null || isDestinationMode)) ? 'cursor: pointer;' : '';
                     const bgOverride = isOrigin ? 'background-color: color-mix(in srgb, var(--color-btn-primary-bg) 30%, white);' : '';
 
+                    const touchBlock = isEditMode ? 'touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;' : '';
                     listEl.innerHTML += `
-                        <div class="saved-stop-card" style="--accent-color: ${accent}; display: flex; align-items: center; ${cursor} ${bgOverride}" ${clickHandler}>
+                        <div class="saved-stop-card" style="--accent-color: ${accent}; display: flex; align-items: center; ${cursor} ${bgOverride} ${touchBlock}" ${clickHandler}>
                             ${cardInner}
                         </div>
                     `;
@@ -284,15 +286,116 @@
                         </div>
                     `;
                 }
+
+                if (isEditMode) initDragDrop();
             }
+
+            function initDragDrop() {
+                const cards = Array.from(listEl.querySelectorAll('.saved-stop-card'));
+                if (cards.length < 2) return;
+
+                cards.forEach((card, fromPos) => {
+                    const handle = card.querySelector('.drag-handle');
+                    if (!handle) return;
+
+                    let ghost = null;
+                    let offsetY = 0;
+                    let toPos = fromPos;
+                    let activeId = null;
+                    let snapRects = null; // card rects captured at drag start, before any transforms
+                    let cardStep = 0;    // px from top of one card to top of next
+
+                    function applyShifts() {
+                        cards.forEach((c, i) => {
+                            if (c === card) return;
+                            let shift = 0;
+                            if (fromPos < toPos && i > fromPos && i <= toPos) shift = -cardStep;
+                            else if (fromPos > toPos && i >= toPos && i < fromPos) shift = cardStep;
+                            c.style.transform = shift ? `translateY(${shift}px)` : '';
+                        });
+                    }
+
+                    function onPointerMove(e) {
+                        if (e.pointerId !== activeId || !ghost) return;
+                        e.preventDefault();
+                        ghost.style.top = (e.clientY - offsetY) + 'px';
+
+                        // Hit-test against original (pre-transform) midpoints
+                        let newToPos = cards.length - 1;
+                        for (let i = 0; i < cards.length; i++) {
+                            if (e.clientY < snapRects[i].top + snapRects[i].height / 2) {
+                                newToPos = i;
+                                break;
+                            }
+                        }
+                        if (newToPos !== toPos) { toPos = newToPos; applyShifts(); }
+                    }
+
+                    function onPointerUp(e) {
+                        if (e.pointerId !== activeId) return;
+                        finish();
+                    }
+
+                    function finish() {
+                        document.removeEventListener('pointermove', onPointerMove);
+                        document.removeEventListener('pointerup', onPointerUp);
+                        document.removeEventListener('pointercancel', finish);
+                        if (ghost) { ghost.remove(); ghost = null; }
+                        // Clear all transforms so renderStops starts clean
+                        cards.forEach(c => { c.style.transform = ''; c.style.transition = ''; });
+                        card.style.opacity = '';
+                        activeId = null;
+
+                        if (toPos !== fromPos) {
+                            const moved = stops.splice(fromPos, 1)[0];
+                            stops.splice(toPos, 0, moved);
+                            sessionStorage.setItem('savedStops', JSON.stringify(stops));
+                        }
+                        renderStops();
+                    }
+
+                    handle.addEventListener('pointerdown', (e) => {
+                        e.preventDefault();
+                        activeId = e.pointerId;
+                        toPos = fromPos;
+
+                        // Snapshot rects BEFORE any transforms
+                        snapRects = cards.map(c => c.getBoundingClientRect());
+                        cardStep = snapRects.length >= 2
+                            ? snapRects[1].top - snapRects[0].top
+                            : snapRects[0].height + 16;
+
+                        const rect = snapRects[fromPos];
+                        offsetY = e.clientY - rect.top;
+
+                        // Enable smooth slide on all sibling cards
+                        cards.forEach((c, i) => {
+                            if (i !== fromPos) c.style.transition = 'transform 0.18s ease';
+                        });
+
+                        ghost = card.cloneNode(true);
+                        ghost.style.cssText = `position:fixed;top:${rect.top}px;left:${rect.left}px;width:${rect.width}px;opacity:0.92;z-index:9999;pointer-events:none;box-shadow:0 12px 40px rgba(0,0,0,0.4);transform:scale(1.04);border-radius:20px;`;
+                        document.body.appendChild(ghost);
+                        card.style.opacity = '0'; // hide slot; ghost represents it visually
+
+                        document.addEventListener('pointermove', onPointerMove, { passive: false });
+                        document.addEventListener('pointerup', onPointerUp);
+                        document.addEventListener('pointercancel', finish);
+                    });
+                });
+            }
+
+            const passengerLabel = document.getElementById('passenger-label');
 
             editBtn.addEventListener('click', () => {
                 if (selectedOriginIdx !== null) return;
                 isEditMode = !isEditMode;
                 if (isEditMode) {
                     editBtn.innerHTML = `완료 <i class="ph-bold ph-check"></i>`;
+                    passengerLabel.style.display = 'none';
                 } else {
                     editBtn.innerHTML = `정류장 편집 <i class="ph-bold ph-pencil-simple"></i>`;
+                    passengerLabel.style.display = '';
                 }
                 renderStops();
             });
